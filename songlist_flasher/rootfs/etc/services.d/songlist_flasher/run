@@ -11,9 +11,21 @@ mkdir -p "${CONFIG_DIR}"
 cp /app/esp32-matrix-portal-s3.yaml "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
 cp /app/parse_setlist.py "${CONFIG_DIR}/parse_setlist.py"
 
-LAST_SETLIST=$(ls "${CONFIG_DIR}"/last_setlist.* 2>/dev/null | head -n1)
+# Kein `ls ... | head` hier: bashio setzt errexit+pipefail, und `ls` liefert
+# Exit 2, wenn das Glob nicht matcht -- der Service würde dann beim ersten
+# Start (noch keine Setlist hochgeladen) still mit Code 2 abbrechen.
+LAST_SETLIST=""
+for candidate in "${CONFIG_DIR}"/last_setlist.*; do
+  if [ -f "${candidate}" ]; then
+    LAST_SETLIST="${candidate}"
+    break
+  fi
+done
 if [ -n "${LAST_SETLIST}" ]; then
-  python3 "${CONFIG_DIR}/parse_setlist.py" "${LAST_SETLIST}" "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
+  # Eine kaputte gespeicherte Setlist darf den Add-on-Start nicht verhindern --
+  # die YAML-Vorlage bleibt dann einfach bei ihren Standardwerten.
+  python3 "${CONFIG_DIR}/parse_setlist.py" "${LAST_SETLIST}" "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml" \
+    || bashio::log.warning "Konnte ${LAST_SETLIST} nicht einlesen -- starte mit Vorlage."
 fi
 
 WIFI_SSID=$(bashio::config 'wifi_ssid')
