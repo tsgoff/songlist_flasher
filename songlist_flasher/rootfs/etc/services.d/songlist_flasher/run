@@ -4,10 +4,17 @@ set -e
 CONFIG_DIR=/data/esphome-config
 mkdir -p "${CONFIG_DIR}"
 
-if [ ! -f "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml" ]; then
-  cp /app/esp32-matrix-portal-s3.yaml "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
-fi
+# Immer die gebündelte Vorlage übernehmen, damit Fixes/Änderungen am Add-on
+# nach einem Update wirksam werden (sonst bliebe eine ggf. veraltete/fehler-
+# hafte Kopie für immer liegen). Die zuletzt hochgeladene Setlist wird direkt
+# danach aus last_setlist.* erneut eingetragen, falls vorhanden.
+cp /app/esp32-matrix-portal-s3.yaml "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
 cp /app/parse_setlist.py "${CONFIG_DIR}/parse_setlist.py"
+
+LAST_SETLIST=$(ls "${CONFIG_DIR}"/last_setlist.* 2>/dev/null | head -n1)
+if [ -n "${LAST_SETLIST}" ]; then
+  python3 "${CONFIG_DIR}/parse_setlist.py" "${LAST_SETLIST}" "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
+fi
 
 WIFI_SSID=$(bashio::config 'wifi_ssid')
 WIFI_PASSWORD=$(bashio::config 'wifi_password')

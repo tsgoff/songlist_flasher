@@ -46,3 +46,8 @@ Store.
   (alter Raspberry Pi) wird nicht unterstützt.
 - OTA läuft über die feste IP aus der Konfiguration, nicht über mDNS/`.local`
   -- robuster in einem Add-on-Container, erfordert aber eine stabile IP.
+- Die YAML-Vorlage (`esp32-matrix-portal-s3.yaml`) wird bei jedem Add-on-Start
+  frisch aus dem Image übernommen, damit Bugfixes/Änderungen ankommen. Die
+  zuletzt hochgeladene Setlist wird separat unter `last_setlist.*` im
+  `/data`-Volume gesichert und beim Start automatisch wieder eingetragen --
+  ein Neustart des Add-ons verliert also nicht die aktuelle Setlist.

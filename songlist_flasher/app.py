@@ -28,7 +28,9 @@ def run_job(job_id, upload_path):
 
     def emit(line):
         job["lines"].append(line)
+        print(line, flush=True)
 
+    keep_path = None
     try:
         yaml_path = CONFIG_DIR / YAML_NAME
         emit(f"Parse Setlist: {upload_path.name}")
@@ -42,6 +44,13 @@ def run_job(job_id, upload_path):
             job["done"] = True
             job["ok"] = False
             return
+
+        # Für einen künftigen Add-on-Neustart merken, damit die Setlist nicht
+        # verloren geht, wenn dabei die YAML-Vorlage aktualisiert wird.
+        for old in CONFIG_DIR.glob("last_setlist.*"):
+            old.unlink(missing_ok=True)
+        keep_path = CONFIG_DIR / f"last_setlist{upload_path.suffix}"
+        upload_path.rename(keep_path)
 
         if not DEVICE_IP:
             emit("FEHLER: Keine Geräte-IP konfiguriert (Add-on Konfigurations-Tab).")
@@ -65,7 +74,8 @@ def run_job(job_id, upload_path):
         job["done"] = True
         job["ok"] = False
     finally:
-        upload_path.unlink(missing_ok=True)
+        if keep_path is None:
+            upload_path.unlink(missing_ok=True)
 
 
 @app.route("/")
