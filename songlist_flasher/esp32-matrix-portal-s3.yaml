@@ -63,7 +63,7 @@ script:
           last_change = now;
 
           std::string s;
-          for (auto *t : {&id(song_list_1), &id(song_list_2), &id(song_list_3), &id(song_list_4)}) {
+          for (auto *t : {id(song_list_1), id(song_list_2), id(song_list_3), id(song_list_4)}) {
             if (!t->state.empty()) {
               if (!s.empty()) s += "|";
               s += t->state;
@@ -87,7 +87,7 @@ script:
           last_change = now;
 
           std::string s;
-          for (auto *t : {&id(song_list_1), &id(song_list_2), &id(song_list_3), &id(song_list_4)}) {
+          for (auto *t : {id(song_list_1), id(song_list_2), id(song_list_3), id(song_list_4)}) {
             if (!t->state.empty()) {
               if (!s.empty()) s += "|";
               s += t->state;
@@ -275,7 +275,7 @@ display:
 
       // Songliste zusammenführen
       std::string list;
-      for (auto *t : {&id(song_list_1), &id(song_list_2), &id(song_list_3), &id(song_list_4)}) {
+      for (auto *t : {id(song_list_1), id(song_list_2), id(song_list_3), id(song_list_4)}) {
         if (!t->state.empty()) {
           if (!list.empty()) list += "|";
           list += t->state;
@@ -285,7 +285,7 @@ display:
       // Anweisungsliste zusammenführen (kann kürzer sein als die Songliste --
       // der letzte Song hat keinen Übergang mehr)
       std::string instr_list;
-      for (auto *t : {&id(instr_list_1), &id(instr_list_2), &id(instr_list_3), &id(instr_list_4)}) {
+      for (auto *t : {id(instr_list_1), id(instr_list_2), id(instr_list_3), id(instr_list_4)}) {
         if (!t->state.empty()) {
           if (!instr_list.empty()) instr_list += "|";
           instr_list += t->state;
