@@ -1,0 +1,21 @@
+name: Songlist Flasher
+version: "1.0.0"
+slug: songlist_flasher
+description: Setlist-Excel hochladen -- kompiliert und flasht automatisch das Matrix-Display
+arch:
+  - amd64
+  - aarch64
+init: false
+startup: application
+boot: manual
+ingress: true
+ingress_port: 8099
+panel_icon: mdi:music-note
+options:
+  wifi_ssid: ""
+  wifi_password: ""
+  device_ip: ""
+schema:
+  wifi_ssid: str
+  wifi_password: password
+  device_ip: str

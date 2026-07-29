@@ -1,0 +1,24 @@
+#!/usr/bin/with-contenv bashio
+set -e
+
+CONFIG_DIR=/data/esphome-config
+mkdir -p "${CONFIG_DIR}"
+
+if [ ! -f "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml" ]; then
+  cp /app/esp32-matrix-portal-s3.yaml "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
+fi
+cp /app/parse_setlist.py "${CONFIG_DIR}/parse_setlist.py"
+
+WIFI_SSID=$(bashio::config 'wifi_ssid')
+WIFI_PASSWORD=$(bashio::config 'wifi_password')
+
+cat > "${CONFIG_DIR}/secrets.yaml" <<EOF
+wifi_ssid: "${WIFI_SSID}"
+wifi_password: "${WIFI_PASSWORD}"
+EOF
+
+export SONGLIST_CONFIG_DIR="${CONFIG_DIR}"
+export SONGLIST_DEVICE_IP="$(bashio::config 'device_ip')"
+
+cd /app
+exec python3 /app/app.py

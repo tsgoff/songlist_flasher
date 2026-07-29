@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<title>Songlist Flasher</title>
+<style>
+  body { font-family: sans-serif; margin: 1.5rem; background:#111; color:#eee; }
+  h1 { font-size: 1.2rem; }
+  #log { background:#000; color:#0f8; padding:0.75rem; height:300px; overflow-y:auto;
+         white-space:pre-wrap; font-family:monospace; font-size:0.85rem; border-radius:6px; }
+  button { padding:0.5rem 1rem; font-size:1rem; margin-left:0.5rem; }
+  .ok { color:#4caf50; font-weight:bold; }
+  .fail { color:#f44336; font-weight:bold; }
+</style>
+</head>
+<body>
+<h1>Setlist aktualisieren</h1>
+<p>Ziel-Gerät: {{ device_ip or "(keine IP konfiguriert -- bitte im Konfigurations-Tab des Add-ons eintragen)" }}</p>
+<form id="f">
+  <input type="file" name="setlist" accept=".xlsx,.csv" required>
+  <button type="submit">Aktualisieren</button>
+</form>
+<p id="status"></p>
+<pre id="log"></pre>
+<script>
+const form = document.getElementById('f');
+const log = document.getElementById('log');
+const status = document.getElementById('status');
+
+form.addEventListener('submit', async (e) => {
+  e.preventDefault();
+  log.textContent = '';
+  status.textContent = '';
+  const data = new FormData(form);
+  const res = await fetch('upload', { method: 'POST', body: data });
+  const body = await res.json();
+  if (!res.ok) {
+    status.innerHTML = '<span class="fail">' + body.error + '</span>';
+    return;
+  }
+  const es = new EventSource('stream/' + body.job);
+  es.onmessage = (ev) => {
+    log.textContent += ev.data + '\n';
+    log.scrollTop = log.scrollHeight;
+  };
+  es.addEventListener('done', (ev) => {
+    es.close();
+    if (ev.data === 'ok') {
+      status.innerHTML = '<span class="ok">Fertig -- Display aktualisiert.</span>';
+    } else {
+      status.innerHTML = '<span class="fail">Fehler -- siehe Log oben.</span>';
+    }
+  });
+  es.onerror = () => {
+    es.close();
+  };
+});
+</script>
+</body>
+</html>

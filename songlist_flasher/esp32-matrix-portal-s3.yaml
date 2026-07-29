@@ -1,0 +1,360 @@
+esphome:
+  name: esp32-matrix-portal-s3
+  friendly_name: esp32-matrix-portal-s3
+  on_boot:
+    priority: -100
+    then:
+      - component.update: matrix_display
+
+font:
+  - file: "gfonts://Roboto"
+    id: font_l
+    size: 16
+    glyphs: &song_glyphs "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789 äöüÄÖÜß!.,-|()&'?+`´\"/:;*"
+  - file: "gfonts://Roboto"
+    id: font_m
+    size: 13
+    glyphs: *song_glyphs
+  - file: "gfonts://Roboto"
+    id: font_s
+    size: 10
+    glyphs: *song_glyphs
+
+esp32:
+  board: adafruit_matrixportal_esp32s3
+  variant: esp32s3
+  flash_size: 8MB
+  framework:
+    type: esp-idf
+
+psram:
+  mode: quad
+  speed: 80MHz
+
+logger:
+api:
+ota:
+  - platform: esphome
+
+wifi:
+  networks:
+    - ssid: !secret wifi_ssid
+      password: !secret wifi_password    
+  ap:
+    ssid: "MatrixPortal Fallback"
+    password: "changeme1234"
+
+captive_portal:
+
+# Wiederverwendbare Logik für "weiter"/"zurück" -----------------------------
+# Verwendet von Web-Buttons UND Hardware-Tastern.
+# Eingebaute Sperre: nach jedem Songwechsel werden weitere Trigger für
+# SONG_COOLDOWN_MS ignoriert. Damit kann ein Tastendruck (Press + Release) oder
+# ein gehaltener Taster nie zwei Songs auf einmal weiterschalten.
+script:
+  - id: song_next
+    mode: single
+    then:
+      - lambda: |-
+          static const uint32_t SONG_COOLDOWN_MS = 1500;
+          static uint32_t last_change = 0;
+          uint32_t now = millis();
+          if (last_change != 0 && (now - last_change) < SONG_COOLDOWN_MS) return;
+          last_change = now;
+
+          std::string s;
+          for (auto *t : {&id(song_list_1), &id(song_list_2), &id(song_list_3), &id(song_list_4)}) {
+            if (!t->state.empty()) {
+              if (!s.empty()) s += "|";
+              s += t->state;
+            }
+          }
+          int count = 1;
+          for (char c : s) if (c == '|') count++;
+          if (!s.empty()) {
+            id(current_song_index) = (id(current_song_index) + 1) % count;
+          }
+      - component.update: matrix_display
+
+  - id: song_prev
+    mode: single
+    then:
+      - lambda: |-
+          static const uint32_t SONG_COOLDOWN_MS = 1500;
+          static uint32_t last_change = 0;
+          uint32_t now = millis();
+          if (last_change != 0 && (now - last_change) < SONG_COOLDOWN_MS) return;
+          last_change = now;
+
+          std::string s;
+          for (auto *t : {&id(song_list_1), &id(song_list_2), &id(song_list_3), &id(song_list_4)}) {
+            if (!t->state.empty()) {
+              if (!s.empty()) s += "|";
+              s += t->state;
+            }
+          }
+          int count = 1;
+          for (char c : s) if (c == '|') count++;
+          if (!s.empty()) {
+            id(current_song_index) = (id(current_song_index) - 1 + count) % count;
+          }
+      - component.update: matrix_display
+
+# Physischer Wechselschalter
+# Externer Wechselschalter: A2 = GPIO9 (weiter) -> gegen GND
+binary_sensor:
+  - platform: gpio
+    name: "Schalter Nächster Song (A2)"
+    # Geeignet für Öffner/Schließer-Wechselschalter:
+    # jeder stabile Zustandswechsel (offen<->geschlossen) schaltet einen Song weiter.
+    # delayed_on_off filtert schnelle Tap-Doppelflanken raus -- ein kurzer
+    # Tastendruck (Press + Release < 200ms) wird damit als nur EIN Wechsel gezählt.
+    pin:
+      number: GPIO9
+      mode:
+        input: true
+        pullup: true
+      inverted: true
+    filters:
+      - delayed_on_off: 200ms
+    on_state:
+      then:
+        - script.execute: song_next
+
+# Webinterface aktivieren
+web_server:
+  version: 3
+  port: 80
+
+# Index des aktuellen Songs
+globals:
+  - id: current_song_index
+    type: int
+    restore_value: false
+    initial_value: "0"
+
+# Eingabefelder für die Song-Liste (Trenner: |)
+# Zwei Felder, um das 255-Zeichen-Limit zu umgehen
+text:
+  - platform: template
+    name: "Song-Liste 1"
+    id: song_list_1
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: "Proud Mary|Darf ich bitten|Bring me some water|Baby love|Mustang Sally|Shake your tailfeather|Hold on I`m coming|Sweet Home Alabama|Sledgehammer|Midnight Hour|Baby|I love Rock`n`Roll|Listen to the music|Like the way I do|Valery|Hard to handle"
+    on_value:
+      - lambda: 'id(current_song_index) = 0;'
+      - component.update: matrix_display
+
+  - platform: template
+    name: "Song-Liste 2"
+    id: song_list_2
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: "Addicted to love|I can`t fight this feeling|U + Ur hand|Kompliment|Don´t Stop Believin´|Oh Johnny|Play that funky music|Klar|Long train running|Wunder|My Oh My"
+    on_value:
+      - lambda: 'id(current_song_index) = 0;'
+      - component.update: matrix_display
+
+  - platform: template
+    name: "Song-Liste 3"
+    id: song_list_3
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: ""
+    on_value:
+      - lambda: 'id(current_song_index) = 0;'
+      - component.update: matrix_display
+
+  - platform: template
+    name: "Song-Liste 4"
+    id: song_list_4
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: ""
+    on_value:
+      - lambda: 'id(current_song_index) = 0;'
+      - component.update: matrix_display
+
+  # Übergangsanweisungen (Feld i gehört zum Song an Index i, d.h. die
+  # Anweisung für den Übergang von Song i zu Song i+1). Vier Felder aus dem
+  # gleichen Grund wie bei der Songliste: HA-Text-Entities sind auf 255
+  # Zeichen begrenzt.
+  - platform: template
+    name: "Anweisungs-Liste 1"
+    id: instr_list_1
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: ""
+    on_value:
+      - component.update: matrix_display
+
+  - platform: template
+    name: "Anweisungs-Liste 2"
+    id: instr_list_2
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: ""
+    on_value:
+      - component.update: matrix_display
+
+  - platform: template
+    name: "Anweisungs-Liste 3"
+    id: instr_list_3
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: ""
+    on_value:
+      - component.update: matrix_display
+
+  - platform: template
+    name: "Anweisungs-Liste 4"
+    id: instr_list_4
+    optimistic: true
+    mode: text
+    min_length: 0
+    max_length: 255
+    restore_value: false
+    initial_value: ""
+    on_value:
+      - component.update: matrix_display
+
+# Buttons im Webinterface
+button:
+  - platform: template
+    name: "Nächster Song"
+    on_press:
+      - script.execute: song_next
+
+  - platform: template
+    name: "Vorheriger Song"
+    on_press:
+      - script.execute: song_prev
+
+display:
+  - platform: hub75
+    id: matrix_display
+    board: adafruit-matrix-portal-s3
+    panel_width: 64
+    panel_height: 32
+    # Zwei 64x32-Panels horizontal verkettet = 128x32 Gesamtfläche.
+    # Das per Flachbandkabel angehängte Panel bildet die linke Bildhälfte (x 0-63),
+    # das direkt an der MatrixPortal steckende Panel die rechte (x 64-127).
+    # Falls die Bildhälften vertauscht erscheinen: Flachbandkabel anders stecken
+    # bzw. die beiden Panels physisch tauschen.
+    layout_cols: 2
+    layout: HORIZONTAL
+    brightness: 120
+    bit_depth: 6
+    scan_wiring: STANDARD_TWO_SCAN
+    latch_blanking: 2
+    update_interval: never
+    lambda: |-
+      it.fill(Color::BLACK);
+
+      // Songliste zusammenführen
+      std::string list;
+      for (auto *t : {&id(song_list_1), &id(song_list_2), &id(song_list_3), &id(song_list_4)}) {
+        if (!t->state.empty()) {
+          if (!list.empty()) list += "|";
+          list += t->state;
+        }
+      }
+
+      // Anweisungsliste zusammenführen (kann kürzer sein als die Songliste --
+      // der letzte Song hat keinen Übergang mehr)
+      std::string instr_list;
+      for (auto *t : {&id(instr_list_1), &id(instr_list_2), &id(instr_list_3), &id(instr_list_4)}) {
+        if (!t->state.empty()) {
+          if (!instr_list.empty()) instr_list += "|";
+          instr_list += t->state;
+        }
+      }
+
+      auto split = [](const std::string &s) {
+        std::vector<std::string> parts;
+        size_t start = 0;
+        for (size_t i = 0; i <= s.size(); i++) {
+          if (i == s.size() || s[i] == '|') {
+            if (i > start) parts.push_back(s.substr(start, i - start));
+            start = i + 1;
+          }
+        }
+        return parts;
+      };
+
+      std::vector<std::string> songs = split(list);
+      std::vector<std::string> instructions = split(instr_list);
+
+      if (songs.empty()) {
+        it.printf(0, 0, id(font_l), Color(255, 0, 0), "Keine Songs");
+        return;
+      }
+
+      int count = (int) songs.size();
+      int idx = id(current_song_index);
+      if (idx < 0 || idx >= count) idx = 0;
+
+      std::string cur = songs[idx];  // aktueller Song
+      // Übergangsanweisung zum nächsten Song (leer, falls letzter Song)
+      std::string instr = (idx < (int) instructions.size()) ? instructions[idx] : "";
+
+      // Gesamtfläche beider Panels
+      const int W = 128;
+      const int H = 32;
+      auto col_cur = Color(255, 255, 0);     // Gelb = aktueller Song (Zeile 1)
+      auto col_instr = Color(0, 255, 128);   // Grün = Übergangsanweisung (Zeile 2)
+
+      // Schriftgrößen von groß nach klein. Pro Zeile wird die größte Schrift
+      // gewählt, die noch in die volle Breite passt (sonst die kleinste).
+      font::Font *fonts[] = { id(font_l), id(font_m), id(font_s) };
+      const int NF = sizeof(fonts) / sizeof(fonts[0]);
+
+      auto choose = [&](const std::string &t, int &w) -> font::Font* {
+        for (int i = 0; i < NF; i++) {
+          int x, y, ww, hh;
+          it.get_text_bounds(0, 0, t.c_str(), fonts[i],
+                             TextAlign::TOP_LEFT, &x, &y, &ww, &hh);
+          if (ww <= W || i == NF - 1) { w = ww; return fonts[i]; }
+        }
+        w = 0; return fonts[NF - 1];
+      };
+
+      int wcur = 0, winstr = 0;
+      font::Font *fcur = choose(cur, wcur);
+      font::Font *finstr = choose(instr, winstr);
+
+      // An der Großbuchstaben-Höhe ausrichten, damit oben/unten kaum Rand bleibt:
+      // Zeile 1 schließt oben bündig ab, Zeile 2 unten (je nach eigener Schrift).
+      int y1 = fcur->get_capheight() - fcur->get_baseline();
+      int y2 = H - finstr->get_baseline() - finstr->get_descender();
+
+      // Passt die Zeile -> zentrieren, sonst linksbündig (Rest wird abgeschnitten)
+      int x_cur = (wcur <= W) ? (W - wcur) / 2 : 0;
+      int x_instr = (winstr <= W) ? (W - winstr) / 2 : 0;
+
+      it.printf(x_cur, y1, fcur, col_cur, "%s", cur.c_str());
+      if (!instr.empty()) {
+        it.printf(x_instr, y2, finstr, col_instr, "%s", instr.c_str());
+      }
