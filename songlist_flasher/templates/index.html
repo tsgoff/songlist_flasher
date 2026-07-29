@@ -21,6 +21,7 @@
 <form id="f">
   <input type="file" name="setlist" accept=".xlsx,.csv" required>
   <button id="go" type="submit">Aktualisieren</button>
+  <button id="stop" type="button" hidden>Abbrechen</button>
   <label class="hint"><input type="checkbox" name="clean" value="1">
     Build-Verzeichnis vorher leeren (bei Compile-Fehlern; dauert deutlich länger)</label>
 </form>
@@ -31,12 +32,14 @@ const form = document.getElementById('f');
 const log = document.getElementById('log');
 const status = document.getElementById('status');
 const go = document.getElementById('go');
+const stop = document.getElementById('stop');
 
 // Ein Build dauert leicht 20 Minuten. Damit ein Reload (oder ein zweiter
 // Browser) den Fortschritt nicht verliert, hängen wir uns an den laufenden
 // Job an, statt einen zweiten Build zu starten.
 function attach(jobId) {
   go.disabled = true;
+  stop.hidden = false;
   status.textContent = 'Build läuft ...';
   const es = new EventSource('stream/' + jobId);
   es.onmessage = (ev) => {
@@ -46,6 +49,7 @@ function attach(jobId) {
   es.addEventListener('done', (ev) => {
     es.close();
     go.disabled = false;
+    stop.hidden = true;
     if (ev.data === 'ok') {
       status.innerHTML = '<span class="ok">Fertig -- Display aktualisiert.</span>';
     } else {
@@ -55,10 +59,20 @@ function attach(jobId) {
   es.onerror = () => {
     es.close();
     go.disabled = false;
+    stop.hidden = true;
     status.innerHTML = '<span class="fail">Verbindung zum Log verloren -- '
       + 'Seite neu laden, der Build läuft weiter.</span>';
   };
 }
+
+stop.addEventListener('click', async () => {
+  stop.disabled = true;
+  try {
+    await fetch('cancel', { method: 'POST' });
+  } finally {
+    stop.disabled = false;
+  }
+});
 
 form.addEventListener('submit', async (e) => {
   e.preventDefault();

@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.4
+
+- "Abbrechen"-Button: Ein hängender OTA-Upload blockierte das Add-on dauerhaft,
+  weil jeder weitere Upload nur noch 409 bekam. Der Abbruch beendet die ganze
+  Prozessgruppe (esphome samt platformio/ninja-Kindern).
+- `power_save_mode: none` im WLAN-Block -- der schlafende WLAN-Stack verzögert
+  zusammen mit der DMA-Last des HUB75-Panels die OTA-Bestätigungen.
+
 ## 1.0.3
 
 - Es läuft nur noch EIN Build gleichzeitig. Ein zweiter Upload während eines

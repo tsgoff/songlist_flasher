@@ -5,6 +5,7 @@ ESPHome-YAML, danach kompiliert/flasht `esphome run` per OTA auf das Display.
 Läuft als Foreground-Prozess im Add-on-Container (s6 service).
 """
 import os
+import signal
 import sys
 import subprocess
 import threading
@@ -69,13 +70,17 @@ def run_job(job_id, upload_path, clean_first):
 
         def run_esphome(args, what):
             emit(what)
+            # Eigene Prozessgruppe, damit /cancel auch die von esphome
+            # gestarteten platformio-/ninja-Kinder mitnimmt.
             proc = subprocess.Popen(
-                ["esphome"] + args, cwd=str(CONFIG_DIR),
+                ["esphome"] + args, cwd=str(CONFIG_DIR), start_new_session=True,
                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
             )
+            job["proc"] = proc
             for line in proc.stdout:
                 emit(line.rstrip())
             proc.wait()
+            job["proc"] = None
             return proc.returncode
 
         # Rettungsanker, wenn ein abgebrochener Build kaputte Zwischenstände
@@ -89,8 +94,10 @@ def run_job(job_id, upload_path, clean_first):
 
         rc = run_esphome(["run", "--device", DEVICE_IP, "--no-logs", YAML_NAME],
                          f"Kompiliere & flashe nach {DEVICE_IP} ...")
+        if job.get("cancelled"):
+            emit("Abgebrochen.")
         job["done"] = True
-        job["ok"] = rc == 0
+        job["ok"] = rc == 0 and not job.get("cancelled")
     except Exception as exc:
         emit(f"FEHLER: {exc}")
         job["done"] = True
@@ -106,6 +113,29 @@ def run_job(job_id, upload_path, clean_first):
 @app.route("/")
 def index():
     return render_template("index.html", device_ip=DEVICE_IP)
+
+
+@app.route("/cancel", methods=["POST"])
+def cancel():
+    """Ohne das blockiert ein hängender Lauf das Add-on dauerhaft: der OTA-Upload
+    kann minutenlang stehenbleiben, und solange gibt /upload nur noch 409."""
+    with jobs_lock:
+        job = jobs.get(current_job_id) if current_job_id else None
+    if job is None:
+        return jsonify({"error": "Es läuft kein Build."}), 409
+
+    job["cancelled"] = True
+    proc = job.get("proc")
+    if proc is not None and proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+        except (ProcessLookupError, PermissionError) as exc:
+            return jsonify({"error": f"Abbruch fehlgeschlagen: {exc}"}), 500
+    return jsonify({"ok": True})
 
 
 @app.route("/current")
