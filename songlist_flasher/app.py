@@ -20,10 +20,19 @@ YAML_NAME = "esp32-matrix-portal-s3.yaml"
 PARSER = CONFIG_DIR / "parse_setlist.py"
 
 app = Flask(__name__)
+
+# Nur EIN Build zur Zeit: `esphome run` arbeitet immer im selben
+# Build-Verzeichnis (.esphome/build/<node>). Zwei parallele Läufe löschen sich
+# gegenseitig Dateien weg -- das endet in kaputten ninja-Dateien, fehlendem
+# src/main.cpp und sehr verwirrenden CMake-Fehlern.
 jobs = {}
+jobs_lock = threading.Lock()
+current_job_id = None
+MAX_KEPT_JOBS = 5
 
 
-def run_job(job_id, upload_path):
+def run_job(job_id, upload_path, clean_first):
+    global current_job_id
     job = jobs[job_id]
 
     def emit(line):
@@ -58,17 +67,30 @@ def run_job(job_id, upload_path):
             job["ok"] = False
             return
 
-        emit(f"Kompiliere & flashe nach {DEVICE_IP} ...")
-        proc = subprocess.Popen(
-            ["esphome", "run", "--device", DEVICE_IP, "--no-logs", YAML_NAME],
-            cwd=str(CONFIG_DIR), stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
-            text=True, bufsize=1,
-        )
-        for line in proc.stdout:
-            emit(line.rstrip())
-        proc.wait()
+        def run_esphome(args, what):
+            emit(what)
+            proc = subprocess.Popen(
+                ["esphome"] + args, cwd=str(CONFIG_DIR),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1,
+            )
+            for line in proc.stdout:
+                emit(line.rstrip())
+            proc.wait()
+            return proc.returncode
+
+        # Rettungsanker, wenn ein abgebrochener Build kaputte Zwischenstände
+        # hinterlassen hat (fehlendes src/, abgeschnittene ninja-Dateien).
+        # Kostet einen kompletten Neubau, daher nur auf Wunsch.
+        if clean_first and run_esphome(["clean", YAML_NAME], "Leere Build-Verzeichnis ...") != 0:
+            emit("FEHLER: Build-Verzeichnis konnte nicht geleert werden.")
+            job["done"] = True
+            job["ok"] = False
+            return
+
+        rc = run_esphome(["run", "--device", DEVICE_IP, "--no-logs", YAML_NAME],
+                         f"Kompiliere & flashe nach {DEVICE_IP} ...")
         job["done"] = True
-        job["ok"] = proc.returncode == 0
+        job["ok"] = rc == 0
     except Exception as exc:
         emit(f"FEHLER: {exc}")
         job["done"] = True
@@ -76,6 +98,9 @@ def run_job(job_id, upload_path):
     finally:
         if keep_path is None:
             upload_path.unlink(missing_ok=True)
+        with jobs_lock:
+            if current_job_id == job_id:
+                current_job_id = None
 
 
 @app.route("/")
@@ -83,8 +108,17 @@ def index():
     return render_template("index.html", device_ip=DEVICE_IP)
 
 
+@app.route("/current")
+def current():
+    """Erlaubt dem Browser, sich nach einem Reload wieder anzuhängen -- ein
+    Build läuft leicht 20 Minuten, da ist der Tab schnell mal geschlossen."""
+    with jobs_lock:
+        return jsonify({"job": current_job_id})
+
+
 @app.route("/upload", methods=["POST"])
 def upload():
+    global current_job_id
     file = request.files.get("setlist")
     if not file or not file.filename:
         return jsonify({"error": "Keine Datei ausgewählt."}), 400
@@ -93,12 +127,25 @@ def upload():
         return jsonify({"error": "Nur .xlsx oder .csv erlaubt."}), 400
 
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
-    job_id = uuid.uuid4().hex
-    upload_path = CONFIG_DIR / f"upload_{job_id}.{ext}"
-    file.save(upload_path)
+    with jobs_lock:
+        if current_job_id is not None:
+            return jsonify({
+                "error": "Es läuft bereits ein Build -- bitte abwarten.",
+                "job": current_job_id,
+            }), 409
 
-    jobs[job_id] = {"lines": [], "done": False, "ok": None}
-    threading.Thread(target=run_job, args=(job_id, upload_path), daemon=True).start()
+        job_id = uuid.uuid4().hex
+        upload_path = CONFIG_DIR / f"upload_{job_id}.{ext}"
+        file.save(upload_path)
+
+        for old_id in [j for j, s in jobs.items() if s["done"]][:-MAX_KEPT_JOBS]:
+            del jobs[old_id]
+        jobs[job_id] = {"lines": [], "done": False, "ok": None}
+        current_job_id = job_id
+
+    clean_first = request.form.get("clean") == "1"
+    threading.Thread(target=run_job, args=(job_id, upload_path, clean_first),
+                     daemon=True).start()
     return jsonify({"job": job_id})
 
 

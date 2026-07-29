@@ -1,5 +1,5 @@
 name: Songlist Flasher
-version: "1.0.2"
+version: "1.0.3"
 slug: songlist_flasher
 description: Setlist-Excel hochladen -- kompiliert und flasht automatisch das Matrix-Display
 arch:

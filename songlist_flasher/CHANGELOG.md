@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.3
+
+- Es läuft nur noch EIN Build gleichzeitig. Ein zweiter Upload während eines
+  laufenden Builds startete bisher `esphome run` erneut im selben
+  Build-Verzeichnis -- beide Läufe löschten sich gegenseitig Dateien weg
+  (fehlendes `src/main.cpp`, abgeschnittene ninja-Dateien, wirre CMake-Fehler).
+  Ein zweiter Upload hängt sich jetzt an den laufenden Build an.
+- Nach einem Reload (oder in einem zweiten Browser) wird der laufende Build
+  wieder angezeigt, statt den Fortschritt zu verlieren.
+- Neue Option "Build-Verzeichnis vorher leeren" (`esphome clean`), um einen
+  kaputten Zwischenstand ohne Shell-Zugriff zu reparieren.
+
 ## 1.0.2
 
 - Add-on startet wieder: Der Service brach beim Start still mit Exit-Code 2 ab,
