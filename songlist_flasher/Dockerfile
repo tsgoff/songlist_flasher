@@ -10,6 +10,7 @@ RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
     && /opt/venv/bin/pip install --no-cache-dir esphome flask
 ENV PATH="/opt/venv/bin:${PATH}"
+ENV PLATFORMIO_CORE_DIR="/data/platformio"
 
 WORKDIR /app
 COPY app.py parse_setlist.py esp32-matrix-portal-s3.yaml /app/
