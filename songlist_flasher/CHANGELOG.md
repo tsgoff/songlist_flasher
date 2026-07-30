@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.5
+
+- OTA funktioniert wieder: esphome ist jetzt auf 2026.7.3 gepinnt. Ungepinnt
+  hing der pip-Layer im Docker-Cache auf 2026.6.5 fest, dessen OTA-Client das
+  Display reproduzierbar mit "receiving chunk result response: timed out" nicht
+  flashen konnte -- das offizielle ESPHome-Add-on (2026.7.3) lud dasselbe Gerät
+  über denselben Port in 3 Sekunden.
+
 ## 1.0.4
 
 - "Abbrechen"-Button: Ein hängender OTA-Upload blockierte das Add-on dauerhaft,
