@@ -1,12 +1,17 @@
 # Changelog
 
+## 1.0.6
+
+- Basis-Image auf Debian trixie (Python 3.13). 1.0.5 liess sich nicht bauen:
+  bookworm liefert nur Python 3.11, esphome 2026.7.3 verlangt aber >= 3.12.
+
 ## 1.0.5
 
-- OTA funktioniert wieder: esphome ist jetzt auf 2026.7.3 gepinnt. Ungepinnt
-  hing der pip-Layer im Docker-Cache auf 2026.6.5 fest, dessen OTA-Client das
-  Display reproduzierbar mit "receiving chunk result response: timed out" nicht
-  flashen konnte -- das offizielle ESPHome-Add-on (2026.7.3) lud dasselbe Gerät
-  über denselben Port in 3 Sekunden.
+- OTA funktioniert wieder: esphome ist jetzt auf 2026.7.3 gepinnt. Vorher waehlte
+  pip auf dem Python-3.11-Image stillschweigend das aeltere 2026.6.5, dessen
+  OTA-Client das Display reproduzierbar mit "receiving chunk result response:
+  timed out" nicht flashen konnte -- das offizielle ESPHome-Add-on (2026.7.3)
+  lud dasselbe Geraet ueber denselben Port in 3 Sekunden.
 
 ## 1.0.4
 

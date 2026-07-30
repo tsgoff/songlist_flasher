@@ -6,11 +6,13 @@ RUN apt-get update \
          python3 python3-venv python3-pip git ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
-# esphome NICHT ungepinnt lassen: Der pip-Layer wird von Docker gecacht, damit
-# blieb hier 2026.6.5 hängen, während das offizielle ESPHome-Add-on längst
-# 2026.7.3 nutzte. Dessen OTA-Client lud dasselbe Gerät in 3 Sekunden, unser
-# alter brach reproduzierbar mit "receiving chunk result response: timed out"
-# ab. Version bewusst hochziehen, nicht dem Cache überlassen.
+# esphome gepinnt, damit ein stiller Downgrade auffällt: esphome >= 2026.7
+# braucht Python >= 3.12. Auf dem alten bookworm-Image (Python 3.11) wählte pip
+# deshalb ungefragt 2026.6.5 -- und dessen OTA-Client brach beim Flashen
+# reproduzierbar mit "receiving chunk result response: timed out" ab, während
+# das offizielle ESPHome-Add-on (2026.7.3) dasselbe Gerät über denselben Port in
+# 3 Sekunden lud. Beim Hochziehen der Version also immer die Python-Version des
+# Basis-Images mitprüfen (siehe build.yaml).
 RUN python3 -m venv /opt/venv \
     && /opt/venv/bin/pip install --no-cache-dir --upgrade pip \
     && /opt/venv/bin/pip install --no-cache-dir esphome==2026.7.3 flask
