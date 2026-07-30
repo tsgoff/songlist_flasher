@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.0.7
+
+- Zeilenversatz behoben: Die Zeile direkt unter "Songtitel" wurde immer als
+  zweiter Header verworfen. Fehlt der (z.B. "Einzeln auf Bühne"), fiel der
+  erste Songtitel weg -- danach standen alle Anweisungen in der Songzeile und
+  umgekehrt. Übersprungen wird jetzt nur noch, was wirklich eine Überschrift
+  ist. Die Leerzeile als Workaround stört nicht, ist aber nicht mehr nötig.
+
 ## 1.0.6
 
 - Basis-Image auf Debian trixie (Python 3.13). 1.0.5 liess sich nicht bauen:

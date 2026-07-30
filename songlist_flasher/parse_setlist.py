@@ -33,6 +33,14 @@ from xml.etree import ElementTree as ET
 
 NS = {"s": "http://schemas.openxmlformats.org/spreadsheetml/2006/main"}
 TITLE_HEADER_WORDS = {"songtitel", "song", "title", "titel"}
+# Überschriften der Anweisungsspalte -- nur diese Zeilen dürfen als zweiter
+# Header übersprungen werden, alles andere ist schon der erste Songtitel.
+INSTRUCTION_HEADER_WORDS = {
+    "einzeln auf bühne", "einzeln auf buehne", "einzeln",
+    "anweisung", "anweisungen", "ansage", "ansagen",
+    "übergang", "übergänge", "uebergang", "uebergaenge",
+    "hinweis", "hinweise", "aktion", "aktionen", "info",
+}
 
 
 def read_csv(path):
@@ -131,10 +139,11 @@ def read_xlsx(path):
                   "(kein 'Songtitel'-Header gefunden).")
 
     # Direkt nach dem "Songtitel"-Header kann ein zweiter Header ("Einzeln auf
-    # Bühne" o.ä.) für die Anweisungsspalte stehen -- eine weitere nicht-leere
-    # Zeile, bevor der erste echte Titel kommt. Wir überspringen genau eine
-    # solche Zeile, falls vorhanden.
-    if start < len(values) and values[start]:
+    # Bühne" o.ä.) für die Anweisungsspalte stehen. Den überspringen -- aber nur,
+    # wenn dort wirklich eine Überschrift steht: Wer die Zeile ungefragt
+    # überspringt, frisst bei Dateien ohne zweiten Header den ersten Songtitel,
+    # und dann landen alle Anweisungen als Titel im Display (um eins verschoben).
+    if start < len(values) and values[start].lower() in INSTRUCTION_HEADER_WORDS:
         start += 1
 
     entries = [v for v in values[start:] if v]
