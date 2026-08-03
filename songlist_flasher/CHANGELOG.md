@@ -1,5 +1,17 @@
 # Changelog
 
+## 1.0.8
+
+- Die regelmäßigen Resets im Auftritt sind weg: `api:` stand ohne Optionen da,
+  und ESPHome rebootet dann per Default nach 15 Minuten ohne API-Client
+  (`reboot_timeout: 15min`). Ohne Home Assistant in Reichweite lief der Timer
+  jedes Mal voll ab -- alle 15 Minuten ein Neustart, den ganzen Abend. Der
+  Fallback-Hotspot war unbeteiligt; die Weboberfläche auf Port 80 hält den Timer
+  auch nicht auf. Jetzt `reboot_timeout: 0s` für `api:` und `wifi:`.
+- Der zuletzt angezeigte Song überlebt Reset und Stromausfall: nach dem
+  Einschalten wird wieder dort aufgeblättert, wo aufgehört wurde. Ist die neue
+  Setlist kürzer als der gemerkte Index, startet die Anzeige bei Song 1.
+
 ## 1.0.7
 
 - Zeilenversatz behoben: Die Zeile direkt unter "Songtitel" wurde immer als

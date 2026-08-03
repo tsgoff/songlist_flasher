@@ -4,6 +4,22 @@ esphome:
   on_boot:
     priority: -100
     then:
+      # Priorität -100 heißt: läuft nach dem Setup aller Komponenten, also auch
+      # nachdem die Text-Felder ihr on_value gefeuert haben. Nur deshalb hält
+      # der wiederhergestellte Index hier stand.
+      - lambda: |-
+          int count = 0;
+          for (auto *t : {id(song_list_1), id(song_list_2), id(song_list_3), id(song_list_4)}) {
+            if (t->state.empty()) continue;
+            count++;
+            for (char c : t->state) if (c == '|') count++;
+          }
+          // Nach einer neuen, kürzeren Setlist kann der gemerkte Index hinter
+          // dem Listenende liegen -- dann bei Song 1 anfangen.
+          int idx = id(saved_song_index);
+          if (idx < 0 || (count > 0 && idx >= count)) idx = 0;
+          id(current_song_index) = idx;
+          id(boot_done) = true;
       - component.update: matrix_display
 
 font:
@@ -32,11 +48,26 @@ psram:
   speed: 80MHz
 
 logger:
+
 api:
+  # OHNE DAS STARTET DAS GERÄT ALLE 15 MINUTEN NEU, sobald kein Home Assistant
+  # in Reichweite ist: ESPHome rebootet per Default (reboot_timeout: 15min),
+  # wenn sich kein API-Client verbindet -- gedacht als Notausgang gegen einen
+  # ESP-Bug, bei dem der IP-Stack "verbunden" meldet, ohne es zu sein.
+  # Auf der Bühne verbindet sich nie ein Client, also lief der Timer jedes Mal
+  # voll ab. Der Fallback-Hotspot ist daran unbeteiligt, und die Weboberfläche
+  # auf Port 80 hält den Timer auch nicht auf (das ist nicht die native API).
+  reboot_timeout: 0s
+
 ota:
   - platform: esphome
 
 wifi:
+  # Gleiches Spiel für den WLAN-Watchdog (Default ebenfalls 15min). Greift nur,
+  # solange das Gerät im Station-Modus hängt -- im AP-Modus gilt er laut Doku
+  # nicht. Also relevant für den flackernden Router, nicht für "gar kein WLAN".
+  # Anzeige und Taster brauchen ohnehin kein Netz.
+  reboot_timeout: 0s
   # Ohne das schläft der WLAN-Stack zwischen den Beacons ein; zusammen mit der
   # DMA-Last des HUB75-Panels quittiert das Gerät dann OTA-Chunks zu langsam
   # ("receiving chunk result response: timed out").
@@ -77,6 +108,7 @@ script:
           for (char c : s) if (c == '|') count++;
           if (!s.empty()) {
             id(current_song_index) = (id(current_song_index) + 1) % count;
+            id(saved_song_index) = id(current_song_index);
           }
       - component.update: matrix_display
 
@@ -101,6 +133,7 @@ script:
           for (char c : s) if (c == '|') count++;
           if (!s.empty()) {
             id(current_song_index) = (id(current_song_index) - 1 + count) % count;
+            id(saved_song_index) = id(current_song_index);
           }
       - component.update: matrix_display
 
@@ -137,6 +170,28 @@ globals:
     restore_value: false
     initial_value: "0"
 
+  # Überlebt Reset und Stromausfall (NVS-Flash). Nach dem Einschalten wird der
+  # zuletzt angezeigte Song wieder aufgeblättert, statt bei Song 1 anzufangen --
+  # damit kostet ein Reset mitten im Auftritt keine Blätterei mehr.
+  - id: saved_song_index
+    type: int
+    restore_value: true
+    initial_value: "0"
+
+  # Wird erst am Ende von on_boot gesetzt. Ohne diese Sperre würde das on_value
+  # der Text-Felder -- das beim Setup einmal von selbst feuert -- den gerade
+  # wiederhergestellten Index sofort wieder auf 0 werfen.
+  - id: boot_done
+    type: bool
+    restore_value: false
+    initial_value: "false"
+
+# Default sind 60s: wird auf der Bühne der Stecker gezogen, wäre der letzte
+# Songwechsel sonst verloren. Geschrieben wird nur bei echter Änderung, das
+# sind pro Auftritt ein paar Dutzend Writes -- für NVS völlig unkritisch.
+preferences:
+  flash_write_interval: 5s
+
 # Eingabefelder für die Song-Liste (Trenner: |)
 # Zwei Felder, um das 255-Zeichen-Limit zu umgehen
 text:
@@ -150,7 +205,9 @@ text:
     restore_value: false
     initial_value: "Proud Mary|Darf ich bitten|Bring me some water|Baby love|Mustang Sally|Shake your tailfeather|Hold on I`m coming|Sweet Home Alabama|Sledgehammer|Midnight Hour|Baby|I love Rock`n`Roll|Listen to the music|Like the way I do|Valery|Hard to handle"
     on_value:
-      - lambda: 'id(current_song_index) = 0;'
+      # Nur bei einer echten Änderung im Betrieb zurück auf Song 1. Beim Boot
+      # feuert on_value ebenfalls -- dann gilt der gemerkte Index (siehe on_boot).
+      - lambda: 'if (id(boot_done)) { id(current_song_index) = 0; id(saved_song_index) = 0; }'
       - component.update: matrix_display
 
   - platform: template
@@ -163,7 +220,9 @@ text:
     restore_value: false
     initial_value: "Addicted to love|I can`t fight this feeling|U + Ur hand|Kompliment|Don´t Stop Believin´|Oh Johnny|Play that funky music|Klar|Long train running|Wunder|My Oh My"
     on_value:
-      - lambda: 'id(current_song_index) = 0;'
+      # Nur bei einer echten Änderung im Betrieb zurück auf Song 1. Beim Boot
+      # feuert on_value ebenfalls -- dann gilt der gemerkte Index (siehe on_boot).
+      - lambda: 'if (id(boot_done)) { id(current_song_index) = 0; id(saved_song_index) = 0; }'
       - component.update: matrix_display
 
   - platform: template
@@ -176,7 +235,9 @@ text:
     restore_value: false
     initial_value: ""
     on_value:
-      - lambda: 'id(current_song_index) = 0;'
+      # Nur bei einer echten Änderung im Betrieb zurück auf Song 1. Beim Boot
+      # feuert on_value ebenfalls -- dann gilt der gemerkte Index (siehe on_boot).
+      - lambda: 'if (id(boot_done)) { id(current_song_index) = 0; id(saved_song_index) = 0; }'
       - component.update: matrix_display
 
   - platform: template
@@ -189,7 +250,9 @@ text:
     restore_value: false
     initial_value: ""
     on_value:
-      - lambda: 'id(current_song_index) = 0;'
+      # Nur bei einer echten Änderung im Betrieb zurück auf Song 1. Beim Boot
+      # feuert on_value ebenfalls -- dann gilt der gemerkte Index (siehe on_boot).
+      - lambda: 'if (id(boot_done)) { id(current_song_index) = 0; id(saved_song_index) = 0; }'
       - component.update: matrix_display
 
   # Übergangsanweisungen (Feld i gehört zum Song an Index i, d.h. die
