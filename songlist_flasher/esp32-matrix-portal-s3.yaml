@@ -91,7 +91,10 @@ script:
     mode: single
     then:
       - lambda: |-
-          static const uint32_t SONG_COOLDOWN_MS = 1500;
+          // 800ms statt 1500ms -- so im ESPHome-Editor erprobt, weil 1,5s beim
+          // Weiterschalten zu träge war. Reicht als Entprellung locker: der
+          // delayed_on_off-Filter am Taster braucht ohnehin schon 200ms.
+          static const uint32_t SONG_COOLDOWN_MS = 800;
           static uint32_t last_change = 0;
           uint32_t now = millis();
           if (last_change != 0 && (now - last_change) < SONG_COOLDOWN_MS) return;
@@ -116,7 +119,10 @@ script:
     mode: single
     then:
       - lambda: |-
-          static const uint32_t SONG_COOLDOWN_MS = 1500;
+          // 800ms statt 1500ms -- so im ESPHome-Editor erprobt, weil 1,5s beim
+          // Weiterschalten zu träge war. Reicht als Entprellung locker: der
+          // delayed_on_off-Filter am Taster braucht ohnehin schon 200ms.
+          static const uint32_t SONG_COOLDOWN_MS = 800;
           static uint32_t last_change = 0;
           uint32_t now = millis();
           if (last_change != 0 && (now - last_change) < SONG_COOLDOWN_MS) return;
