@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.0.9
+
+- Songwechsel-Sperre von 1500ms auf 800ms -- direkt im ESPHome-Editor erprobt,
+  weil 1,5s beim Weiterschalten zu träge war. Gilt jetzt für "weiter" und
+  "zurück"; vorher entprellten die beiden unterschiedlich.
+
 ## 1.0.8
 
 - Die regelmäßigen Resets im Auftritt sind weg: `api:` stand ohne Optionen da,
