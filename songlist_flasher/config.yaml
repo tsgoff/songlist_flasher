@@ -1,5 +1,5 @@
 name: Songlist Flasher
-version: "1.0.9"
+version: "1.1.0"
 slug: songlist_flasher
 description: Setlist-Excel hochladen -- kompiliert und flasht automatisch das Matrix-Display
 arch:
@@ -11,6 +11,14 @@ boot: manual
 ingress: true
 ingress_port: 8099
 panel_icon: mdi:music-note
+# Quelle der Geräte-YAML ist /config/esphome -- damit sie im ESPHome-Add-on
+# bearbeitbar ist (Farben, Schriftgrößen). `path:` steht hier bewusst explizit:
+# die HA-Doku sagt nur "all paths map to /<type-name>", der reale Mountpunkt für
+# homeassistant_config ist aber /homeassistant. Darauf soll sich nichts verlassen.
+map:
+  - type: homeassistant_config
+    read_only: false
+    path: /homeassistant
 options:
   wifi_ssid: ""
   wifi_password: ""

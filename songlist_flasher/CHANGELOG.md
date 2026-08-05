@@ -1,5 +1,36 @@
 # Changelog
 
+## 1.1.0
+
+- Die Geräte-YAML ist jetzt in Home Assistant bearbeitbar. Gebaut wird aus
+  `/config/esphome/esp32-matrix-portal-s3.yaml` -- also aus der Datei, die im
+  ESPHome-Add-on im Editor liegt. Farben, Schriftgrößen und kleinere Anpassungen
+  gehen damit ohne Git. Bisher las der Flasher nur seine private Kopie unter
+  `/data` und überschrieb die bei jedem Start; die Datei im ESPHome-Verzeichnis
+  wurde nie angesehen, was zu zwei divergierenden Konfigurationen für dasselbe
+  Gerät führte.
+- Änderungen im Editor wirken beim nächsten Upload -- ein Add-on-Neustart ist
+  nicht nötig. Gebaut wird weiterhin unter `/data`, damit sich der Flasher das
+  `.esphome`-Build-Verzeichnis nicht mit dem offiziellen ESPHome-Add-on teilt.
+- **Einmalige Migration beim ersten Start:** eine vorhandene
+  `/config/esphome/esp32-matrix-portal-s3.yaml` wird als `.yaml.bak` gesichert
+  (ein bereits vorhandenes Backup wird nie überschrieben), dann schreibt das
+  Add-on die aktuelle Vorlage an ihre Stelle. Danach gehört die Datei euch und
+  wird nicht mehr angefasst.
+- **Achtung:** Add-on-Updates ändern die Gerätekonfiguration deshalb nicht mehr
+  von allein. Die mitgelieferte Vorlage liegt zum Vergleichen als
+  `esp32-matrix-portal-s3.template.yaml` daneben und wird bei jedem Start
+  aktualisiert -- Neues daraus muss bewusst übernommen werden.
+- WLAN-Zugangsdaten kommen aus `/config/esphome/secrets.yaml`, falls vorhanden;
+  die Datei wird nur gelesen, nie geschrieben. Fehlende `wifi_ssid`/
+  `wifi_password` werden aus den Add-on-Optionen ergänzt, und ohne eigene
+  `secrets.yaml` bleibt es beim bisherigen Verhalten. Weitere `!secret`-Einträge
+  im Editor brechen den Build damit nicht mehr.
+- Vor dem Kompilieren läuft `esphome config`. Ein Einrückungs- oder Schema-Fehler
+  im Editor kostet jetzt Sekunden statt eines abgebrochenen Builds nach Minuten.
+  C++-Lambdas prüft das nicht -- ein falsches `Color(...)` fällt weiter erst beim
+  Kompilieren auf.
+
 ## 1.0.9
 
 - Songwechsel-Sperre von 1500ms auf 800ms -- direkt im ESPHome-Editor erprobt,

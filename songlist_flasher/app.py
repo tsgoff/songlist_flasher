@@ -5,6 +5,7 @@ ESPHome-YAML, danach kompiliert/flasht `esphome run` per OTA auf das Display.
 Läuft als Foreground-Prozess im Add-on-Container (s6 service).
 """
 import os
+import shutil
 import signal
 import sys
 import subprocess
@@ -19,6 +20,14 @@ CONFIG_DIR = Path(os.environ.get("SONGLIST_CONFIG_DIR", "/data/esphome-config"))
 DEVICE_IP = os.environ.get("SONGLIST_DEVICE_IP", "")
 YAML_NAME = "esp32-matrix-portal-s3.yaml"
 PARSER = CONFIG_DIR / "parse_setlist.py"
+# Die vom Nutzer bearbeitbare Quelle im ESPHome-Verzeichnis von Home Assistant.
+# Wird vor JEDEM Build nach CONFIG_DIR kopiert -- nur so wirkt eine Änderung im
+# ESPHome-Editor sofort und nicht erst nach einem Add-on-Neustart.
+SOURCE_YAML = Path(os.environ.get(
+    "SONGLIST_SOURCE_YAML", f"/homeassistant/esphome/{YAML_NAME}"))
+# Für die Anzeige in der Weboberfläche: /homeassistant ist der Mountpunkt im
+# Container, im Dateieditor von Home Assistant heisst derselbe Pfad /config.
+SOURCE_YAML_LABEL = str(SOURCE_YAML).replace("/homeassistant/", "/config/", 1)
 
 app = Flask(__name__)
 
@@ -43,6 +52,20 @@ def run_job(job_id, upload_path, clean_first):
     keep_path = None
     try:
         yaml_path = CONFIG_DIR / YAML_NAME
+
+        # Immer frisch aus der Nutzerdatei holen, damit im ESPHome-Editor
+        # geänderte Farben/Schriftgrößen in diesen Build eingehen. Gebaut wird
+        # weiterhin in CONFIG_DIR, nicht neben der Quelle -- sonst teilt sich der
+        # Flasher das .esphome-Build-Verzeichnis mit dem ESPHome-Add-on.
+        emit(f"Quelle: {SOURCE_YAML_LABEL}")
+        if not SOURCE_YAML.is_file():
+            emit(f"FEHLER: {SOURCE_YAML_LABEL} existiert nicht. "
+                 "Add-on neu starten -- dann wird die Datei aus der Vorlage angelegt.")
+            job["done"] = True
+            job["ok"] = False
+            return
+        shutil.copyfile(SOURCE_YAML, yaml_path)
+
         emit(f"Parse Setlist: {upload_path.name}")
         result = subprocess.run(
             [sys.executable, str(PARSER), str(upload_path), str(yaml_path)],
@@ -83,6 +106,24 @@ def run_job(job_id, upload_path, clean_first):
             job["proc"] = None
             return proc.returncode
 
+        # YAML vorab prüfen: seit die Datei im ESPHome-Editor bearbeitet wird,
+        # ist ein Einrückungs- oder Schema-Fehler der wahrscheinlichste Fehler --
+        # und der kostet sonst erst nach Minuten Kompilieren eine Fehlermeldung.
+        # Ausgabe nur im Fehlerfall: `esphome config` dumpt sonst die komplette
+        # aufgelöste Konfiguration und würde den Log-Stream zumüllen.
+        # Grenze: C++-Lambdas prüft das nicht, ein falsches Color(...) fällt
+        # weiterhin erst beim Kompilieren auf.
+        emit("Prüfe YAML ...")
+        check = subprocess.run(["esphome", "config", YAML_NAME],
+                               capture_output=True, text=True, cwd=str(CONFIG_DIR))
+        if check.returncode != 0:
+            for line in (check.stdout + check.stderr).splitlines():
+                emit(line)
+            emit(f"FEHLER: {SOURCE_YAML_LABEL} ist fehlerhaft -- im ESPHome-Add-on korrigieren.")
+            job["done"] = True
+            job["ok"] = False
+            return
+
         # Rettungsanker, wenn ein abgebrochener Build kaputte Zwischenstände
         # hinterlassen hat (fehlendes src/, abgeschnittene ninja-Dateien).
         # Kostet einen kompletten Neubau, daher nur auf Wunsch.
@@ -112,7 +153,8 @@ def run_job(job_id, upload_path, clean_first):
 
 @app.route("/")
 def index():
-    return render_template("index.html", device_ip=DEVICE_IP)
+    return render_template("index.html", device_ip=DEVICE_IP,
+                           source_yaml=SOURCE_YAML_LABEL)
 
 
 @app.route("/cancel", methods=["POST"])

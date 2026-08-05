@@ -2,14 +2,55 @@
 set -e
 
 CONFIG_DIR=/data/esphome-config
-mkdir -p "${CONFIG_DIR}"
+YAML_NAME=esp32-matrix-portal-s3.yaml
+# Quelle: die vom Nutzer bearbeitbare Datei im ESPHome-Verzeichnis von Home
+# Assistant. Gebaut wird trotzdem in CONFIG_DIR -- `esphome run` legt seine
+# Artefakte in <cwd>/.esphome ab, und ein mit dem offiziellen ESPHome-Add-on
+# geteiltes Build-Verzeichnis reisst genau die Race Condition wieder auf, die
+# 1.0.3 beseitigt hat (fehlendes src/main.cpp, abgeschnittene ninja-Dateien).
+HA_ESPHOME=/homeassistant/esphome
+SOURCE_YAML="${HA_ESPHOME}/${YAML_NAME}"
+TEMPLATE_COPY="${HA_ESPHOME}/esp32-matrix-portal-s3.template.yaml"
+MIGRATED_MARKER=/data/migrated-to-config-v1
 
-# Immer die gebündelte Vorlage übernehmen, damit Fixes/Änderungen am Add-on
-# nach einem Update wirksam werden (sonst bliebe eine ggf. veraltete/fehler-
-# hafte Kopie für immer liegen). Die zuletzt hochgeladene Setlist wird direkt
-# danach aus last_setlist.* erneut eingetragen, falls vorhanden.
-cp /app/esp32-matrix-portal-s3.yaml "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml"
+mkdir -p "${CONFIG_DIR}" "${HA_ESPHOME}"
+
+# Einmalige Migration: ab hier gehört SOURCE_YAML dem Nutzer und wird nie wieder
+# überschrieben. Was vorher dort lag, ist ein anderer Stand (die Datei wurde bis
+# 1.0.9 vom Flasher gar nicht gelesen) -- deshalb erst sichern, dann ersetzen.
+if [ ! -f "${MIGRATED_MARKER}" ]; then
+  if [ -f "${SOURCE_YAML}" ]; then
+    # Ein vorhandenes Backup nie überschreiben, sonst ist beim zweiten Anlauf
+    # das Original weg.
+    BACKUP="${SOURCE_YAML}.bak"
+    n=1
+    while [ -e "${BACKUP}" ]; do
+      BACKUP="${SOURCE_YAML}.bak.${n}"
+      n=$((n + 1))
+    done
+    cp "${SOURCE_YAML}" "${BACKUP}"
+    bashio::log.info "Bisherige ${SOURCE_YAML} gesichert als ${BACKUP}."
+  fi
+  cp "/app/${YAML_NAME}" "${SOURCE_YAML}"
+  touch "${MIGRATED_MARKER}"
+  bashio::log.info "${SOURCE_YAML} mit der Add-on-Vorlage initialisiert -- ab jetzt im ESPHome-Add-on bearbeitbar."
+fi
+
+# Vom Nutzer gelöscht: neu säen, sonst käme der erste Build ohne Quelle nicht weit.
+if [ ! -f "${SOURCE_YAML}" ]; then
+  cp "/app/${YAML_NAME}" "${SOURCE_YAML}"
+  bashio::log.warning "${SOURCE_YAML} fehlte -- aus der Add-on-Vorlage neu angelegt."
+fi
+
+# Referenzkopie der gebündelten Vorlage. Seit die Nutzerdatei nicht mehr
+# überschrieben wird, erreichen Vorlagen-Änderungen neuer Add-on-Versionen das
+# Gerät nicht mehr von allein -- hiergegen lässt sich diffen, was neu ist.
+cp "/app/${YAML_NAME}" "${TEMPLATE_COPY}"
 cp /app/parse_setlist.py "${CONFIG_DIR}/parse_setlist.py"
+
+# Arbeitskopie für den Build. app.py holt sie vor jedem Build erneut, damit eine
+# Änderung im Editor nicht erst nach einem Add-on-Neustart wirkt.
+cp "${SOURCE_YAML}" "${CONFIG_DIR}/${YAML_NAME}"
 
 # Kein `ls ... | head` hier: bashio setzt errexit+pipefail, und `ls` liefert
 # Exit 2, wenn das Glob nicht matcht -- der Service würde dann beim ersten
@@ -24,19 +65,39 @@ done
 if [ -n "${LAST_SETLIST}" ]; then
   # Eine kaputte gespeicherte Setlist darf den Add-on-Start nicht verhindern --
   # die YAML-Vorlage bleibt dann einfach bei ihren Standardwerten.
-  python3 "${CONFIG_DIR}/parse_setlist.py" "${LAST_SETLIST}" "${CONFIG_DIR}/esp32-matrix-portal-s3.yaml" \
+  python3 "${CONFIG_DIR}/parse_setlist.py" "${LAST_SETLIST}" "${CONFIG_DIR}/${YAML_NAME}" \
     || bashio::log.warning "Konnte ${LAST_SETLIST} nicht einlesen -- starte mit Vorlage."
 fi
 
 WIFI_SSID=$(bashio::config 'wifi_ssid')
 WIFI_PASSWORD=$(bashio::config 'wifi_password')
 
-cat > "${CONFIG_DIR}/secrets.yaml" <<EOF
+# secrets.yaml des Nutzers wird nur GELESEN, nie geschrieben -- die Datei unter
+# /config/esphome gehört ihm und dem offiziellen ESPHome-Add-on. Vorteil dieser
+# Reihenfolge: legt jemand im Editor ein weiteres !secret an, findet der Build es.
+if [ -f "${HA_ESPHOME}/secrets.yaml" ]; then
+  cp "${HA_ESPHOME}/secrets.yaml" "${CONFIG_DIR}/secrets.yaml"
+  bashio::log.info "Nutze ${HA_ESPHOME}/secrets.yaml."
+  # Fehlende WLAN-Keys aus den Add-on-Optionen nachtragen. `grep -q` steht im
+  # if, nicht davor: bashio hat errexit gesetzt, ein nicht-treffendes grep würde
+  # den Service sonst still beenden.
+  for key in wifi_ssid wifi_password; do
+    if [ "${key}" = "wifi_ssid" ]; then value="${WIFI_SSID}"; else value="${WIFI_PASSWORD}"; fi
+    if [ -n "${value}" ] && ! grep -qE "^[[:space:]]*${key}:" "${CONFIG_DIR}/secrets.yaml"; then
+      printf '%s: "%s"\n' "${key}" "${value}" >> "${CONFIG_DIR}/secrets.yaml"
+      bashio::log.info "${key} fehlte in secrets.yaml -- aus den Add-on-Optionen ergänzt."
+    fi
+  done
+else
+  cat > "${CONFIG_DIR}/secrets.yaml" <<EOF
 wifi_ssid: "${WIFI_SSID}"
 wifi_password: "${WIFI_PASSWORD}"
 EOF
+  bashio::log.info "Keine ${HA_ESPHOME}/secrets.yaml -- nutze die Add-on-Optionen."
+fi
 
 export SONGLIST_CONFIG_DIR="${CONFIG_DIR}"
+export SONGLIST_SOURCE_YAML="${SOURCE_YAML}"
 export SONGLIST_DEVICE_IP="$(bashio::config 'device_ip')"
 
 cd /app

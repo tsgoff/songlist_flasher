@@ -25,6 +25,11 @@
   <label class="hint"><input type="checkbox" name="clean" value="1">
     Build-Verzeichnis vorher leeren (bei Compile-Fehlern; dauert deutlich länger)</label>
 </form>
+<p class="hint">Gebaut wird aus <code>{{ source_yaml }}</code> -- diese Datei ist im
+  ESPHome-Add-on bearbeitbar (Farben, Schriftgrößen). Änderungen dort werden beim
+  nächsten Upload übernommen; das Add-on überschreibt die Datei nicht.
+  Die mitgelieferte Vorlage liegt zum Vergleich als
+  <code>esp32-matrix-portal-s3.template.yaml</code> daneben.</p>
 <p id="status"></p>
 <pre id="log"></pre>
 <script>
